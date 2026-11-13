@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MHD-Tracker</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1b1f24;--mu:#6b7480;--bd:#e1e5ea;--ac:#1f6feb;--red:#d92d20;--org:#e8710a;--yel:#c79a00;--grn:#198754;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14171b;--card:#1d2127;--tx:#eceff3;--mu:#98a1ad;--bd:#2d333b;--ac:#58a6ff;--red:#ff6b5e;--org:#ffa04d;--yel:#e8c547;--grn:#4cc38a}}
+:root[data-theme="dark"]{--bg:#14171b;--card:#1d2127;--tx:#eceff3;--mu:#98a1ad;--bd:#2d333b;--ac:#58a6ff;--red:#ff6b5e;--org:#ffa04d;--yel:#e8c547;--grn:#4cc38a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:640px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:4px 0 12px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+input{flex:1 1 140px;min-width:0;padding:12px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit}
+button{padding:12px 16px;border:0;border-radius:10px;background:var(--ac);color:#fff;font:inherit;font-weight:600;cursor:pointer}
+button.g{background:transparent;color:var(--mu);border:1px solid var(--bd);font-weight:500;padding:8px 12px}
+#warn{display:none;border-color:var(--red);background:color-mix(in srgb,var(--red) 12%,var(--card))}
+.it{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--bd)}
+.it:first-child{border-top:0}
+.dot{width:12px;height:12px;border-radius:50%;flex:none}
+.th{width:48px;height:48px;object-fit:cover;border-radius:8px;flex:none;background:var(--bd);cursor:pointer}
+#lb{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:50;align-items:center;justify-content:center;padding:20px}
+#lb img{max-width:100%;max-height:100%;border-radius:12px}
+.in{flex:1;min-width:0}
+.nm{font-weight:600;overflow-wrap:anywhere}
+.sub{font-size:14px;color:var(--mu)}
+.s-red{color:var(--red)}.s-org{color:var(--org)}.s-yel{color:var(--yel)}.s-grn{color:var(--grn)}
+.bg-red{background:var(--red)}.bg-org{background:var(--org)}.bg-yel{background:var(--yel)}.bg-grn{background:var(--grn)}
+.mu{color:var(--mu);font-size:14px}
+label.w{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--mu)}
+label.w input{flex:0 0 64px;padding:8px}
+</style>
+</head>
+<body>
+<main>
+<h1>🥫 MHD-Tracker</h1>
+
+<div class="card" id="warn"></div>
+
+<div class="card">
+  <div class="row" style="margin-bottom:8px">
+    <button id="cam" style="flex:1 1 100%">📷 Produkt fotografieren</button>
+    <input id="bc" type="hidden">
+    <input id="file" type="file" accept="image/*" capture="environment" style="display:none">
+  </div>
+  <video id="vid" playsinline muted style="display:none;width:100%;border-radius:10px;margin-bottom:8px"></video>
+  <div id="reader" style="display:none;margin-bottom:8px"></div>
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><img id="pv" alt="" style="display:none;width:56px;height:56px;object-fit:cover;border-radius:10px"><div class="mu" id="hint2">Foto vom Produkt machen – Name und Bild werden übernommen.</div></div>
+  <div class="row">
+    <input id="n" placeholder="Artikel (z. B. Milch 1 L)" autocomplete="off">
+    <input id="d" type="date" aria-label="MHD">
+  </div>
+  <div class="row" style="margin-top:8px"><button id="add">Hinzufügen</button></div>
+</div>
+
+<div class="card">
+  <div id="list"></div>
+  <div id="empty" class="mu">Noch keine Artikel erfasst.</div>
+</div>
+
+<div class="card">
+  <div class="row" style="justify-content:space-between;align-items:center"><strong>✅ Erledigt (Verlauf)</strong><button class="g" id="clr">Leeren</button></div>
+  <div id="dl"></div>
+  <div id="de" class="mu" style="margin-top:8px">Noch nichts erledigt.</div>
+</div>
+
+<div class="card">
+  <label class="w">Warnen ab <input id="wd" type="number" min="0" max="30" value="3"> Tagen vor Ablauf</label>
+  <div class="row" style="margin-top:10px">
+    <button class="g" id="notif">🔔 Benachrichtigungen erlauben</button>
+  </div>
+  <p class="mu" id="hint" style="margin:10px 0 0">Beim Öffnen der App wirst du auf bald ablaufende Artikel hingewiesen. Tipp: Seite als Lesezeichen / Startbildschirm-Symbol speichern und jeden Tag kurz öffnen.</p>
+</div>
+</main>
+<div id="lb"><img id="lbi" alt=""></div>
+
+<script>
+(function(){
+var items=[], col=null, LS='mhd_items_v1', LSW='mhd_warn_v1';
+var $=function(i){return document.getElementById(i)};
+
+function lsGet(k,def){try{var v=localStorage.getItem(k);return v?JSON.parse(v):def}catch(e){return def}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+
+function days(iso){
+  var p=iso.split('-'),t=new Date(+p[0],+p[1]-1,+p[2]),n=new Date();
+  n=new Date(n.getFullYear(),n.getMonth(),n.getDate());
+  return Math.round((t-n)/864e5);
+}
+function fmt(iso){var p=iso.split('-');return p[2]+'.'+p[1]+'.'+p[0]}
+function wd(){var v=parseInt($('wd').value,10);return isNaN(v)?3:v}
+function st(dd){
+  if(dd<0)return['red','abgelaufen seit '+(-dd)+(dd===-1?' Tag':' Tagen')];
+  if(dd===0)return['red','läuft heute ab'];
+  if(dd<=wd())return['org','noch '+dd+(dd===1?' Tag':' Tage')];
+  if(dd<=wd()+4)return['yel','noch '+dd+' Tage'];
+  return['grn','noch '+dd+' Tage'];
+}
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+
+function render(){
+  var s=items.slice().sort(function(a,b){return a.mhd<b.mhd?-1:a.mhd>b.mhd?1:0});
+  var h='',crit=[];
+  s.forEach(function(it){
+    var dd=days(it.mhd),x=st(dd);
+    if(x[0]==='red'||x[0]==='org')crit.push(it);
+    h+='<div class="it"><span class="dot bg-'+x[0]+'"></span>'+(it.img?'<img class="th" src="'+it.img+'" alt="">':'')+'<div class="in"><div class="nm">'+esc(it.name)+(it.qty?' <span class="mu">× '+esc(String(it.qty))+'</span>':'')+'</div><div class="sub">MHD '+fmt(it.mhd)+' · <span class="s-'+x[0]+'">'+x[1]+'</span></div></div><button class="g" data-id="'+it.id+'">Erledigt</button></div>';
+  });
+  $('list').innerHTML=h;
+  $('empty').style.display=s.length?'none':'block';
+  var w=$('warn');
+  if(crit.length){
+    w.style.display='block';
+    w.innerHTML='<strong>⚠️ '+crit.length+' Artikel prüfen / aussortieren</strong><div class="sub" style="margin-top:4px">'+crit.slice(0,6).map(function(i){return esc(i.name)+' ('+fmt(i.mhd)+')'}).join(', ')+(crit.length>6?' …':'')+'</div>';
+  }else w.style.display='none';
+  return crit;
+}
+
+var notified=false;
+function notify(crit){
+  if(notified||!crit.length||!('Notification' in window)||Notification.permission!=='granted')return;
+  notified=true;
+  try{new Notification('MHD-Tracker: '+crit.length+' Artikel prüfen',{body:crit.slice(0,4).map(function(i){return i.name}).join(', ')})}catch(e){}
+}
+
+function persistLocal(){lsSet(LS,items)}
+
+function addItem(){
+  var n=$('n').value.trim(),d=$('d').value,q='';
+  if(!n||!d){(n?$('d'):$('n')).focus();return}
+  var it={id:'i'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),name:n,mhd:d,qty:null,img:thumb||null};
+  var bcv=$('bc').value.trim();if(bcv)saveCat(bcv,n);
+  $('bc').value='';$('hint2').textContent='Foto vom Produkt machen – Name und Bild werden übernommen.';thumb='';$('pv').style.display='none';$('pv').removeAttribute('src');
+  $('n').value='';$('d').value='';$('n').focus();
+  if(col){col.doc(it.id).set({name:it.name,mhd:it.mhd,qty:it.qty,img:it.img}).catch(function(){items.push(it);persistLocal();render()})}
+  else{items.push(it);persistLocal();render()}
+}
+function removeItem(id){
+  var it0=items.filter(function(i){return i.id===id})[0];
+  if(it0){var rec={name:it0.name,mhd:it0.mhd,img:it0.img||null,at:Date.now()};arch.push({id:id,name:rec.name,mhd:rec.mhd,img:rec.img,at:rec.at});lsSet(LSD,arch);renderDone();if(acol)acol.doc(id).set(rec).catch(function(){})}
+  if(col){col.doc(id).delete().catch(function(){})}
+  else{items=items.filter(function(i){return i.id!==id});persistLocal();render()}
+}
+
+var cat=lsGet('mhd_cat_v1',{}),ccol=null,stream=null,scanTimer=null,h5=null;
+function saveCat(code,name){cat[code]=name;lsSet('mhd_cat_v1',cat);if(ccol)ccol.doc(code).set({name:name}).catch(function(){})}
+function onCode(code){
+  code=(code||'').trim();if(!code)return;
+  $('bc').value=code;
+  if(cat[code]){$('n').value=cat[code];$('hint2').textContent='✓ Erkannt: '+cat[code]+' – jetzt MHD wählen';$('d').focus()}
+  else{$('n').value='';$('hint2').textContent='Neuer Artikel – Namen eingeben, wird fürs nächste Mal gemerkt';$('n').focus()}
+}
+function stopCam(){
+  clearInterval(scanTimer);
+  if(stream){stream.getTracks().forEach(function(t){t.stop()});stream=null}
+  $('vid').style.display='none';
+  if(h5){var x=h5;h5=null;x.stop().then(function(){x.clear()}).catch(function(){})}
+  $('reader').style.display='none';
+}
+function camFail(){stopCam();$('hint2').textContent='Kamera hier nicht verfügbar oder nicht erlaubt – Barcode per Scanner oder Tastatur eingeben.'}
+function startCam(){
+  if('BarcodeDetector' in window){
+    var det=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128']});
+    navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}).then(function(s){
+      stream=s;var v=$('vid');v.srcObject=s;v.style.display='block';v.play();
+      scanTimer=setInterval(function(){det.detect(v).then(function(r){if(r.length){var c=r[0].rawValue;stopCam();onCode(c)}}).catch(function(){})},300);
+    }).catch(camFail);
+  }else{
+    var go=function(){$('reader').style.display='block';h5=new Html5Qrcode('reader');h5.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:150}},function(t){stopCam();onCode(t)},function(){}).catch(camFail)};
+    if(window.Html5Qrcode)go();
+    else{var sc=document.createElement('script');sc.src='https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js';sc.onload=go;sc.onerror=camFail;document.head.appendChild(sc)}
+  }
+}
+$('cam').onclick=function(){$('file').click()};
+function makeThumb(f){return createImageBitmap(f).then(function(b){var s=Math.min(1,400/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(b.width*s));c.height=Math.max(1,Math.round(b.height*s));c.getContext('2d').drawImage(b,0,0,c.width,c.height);return c.toDataURL('image/jpeg',0.6)})}
+var thumb='';
+function resizeImg(f){return createImageBitmap(f).then(function(b){var s=Math.min(1,1280/Math.max(b.width,b.height)),c=document.createElement('canvas');c.width=Math.round(b.width*s);c.height=Math.round(b.height*s);c.getContext('2d').drawImage(b,0,0,c.width,c.height);return new Promise(function(r){c.toBlob(r,'image/jpeg',0.85)})})}
+function aiRead(f){
+  return claude.use('sample').then(function(sa){
+    if(!sa)throw 0;
+    return resizeImg(f).then(function(bl){return sa.json('Das Foto zeigt einen Lebensmittel-Artikel aus einer Tankstelle. Antworte NUR mit JSON: {"name":string,"mhd":string|null,"barcode":string|null}. name: kurzer deutscher Produktname mit Marke und Menge, z. B. "Müller Milch Schoko 400 g". mhd: das aufgedruckte Mindesthaltbarkeitsdatum als YYYY-MM-DD (nur Monat/Jahr: letzter Tag des Monats), sonst null. barcode: nur die Ziffern unter dem Strichcode, falls klar lesbar, sonst null. Nichts erfinden; wenn kein Produkt erkennbar ist, name leer lassen.',{images:[bl],modelTier:'quick'})});
+  });
+}
+$('file').onchange=function(){
+  var f=this.files&&this.files[0];this.value='';if(!f)return;
+  makeThumb(f).then(function(u){thumb=u;$('pv').src=u;$('pv').style.display='block'}).catch(function(){});
+  $('hint2').textContent='Foto wird gelesen …';
+  aiRead(f).then(function(r){
+    if(!r||!r.name)throw 0;
+    if(r.barcode)$('bc').value=String(r.barcode).replace(/\D/g,'');
+    var code=$('bc').value.trim();
+    $('n').value=(code&&cat[code])||r.name;
+    if(r.mhd&&/^\d{4}-\d{2}-\d{2}$/.test(r.mhd))$('d').value=r.mhd;
+    $('hint2').textContent='✓ Erkannt: '+$('n').value+($('d').value?' · MHD '+fmt($('d').value)+' – bitte kurz prüfen':' – bitte MHD wählen');
+    ($('d').value?$('add'):$('d')).focus();
+  }).catch(function(){decodeFile(f)});
+};
+function decodeFile(f){
+  $('hint2').textContent='Foto wird gelesen …';
+  var done=function(c){if(c)onCode(c);else $('hint2').textContent='Kein Barcode erkannt – Foto näher, gerade und gut beleuchtet aufnehmen oder Code eintippen.'};
+  var viaLib=function(){
+    var go=function(){var h=new Html5Qrcode('reader');h.scanFile(f,false).then(function(t){done(t)}).catch(function(){done(null)})};
+    if(window.Html5Qrcode)go();
+    else{var sc=document.createElement('script');sc.src='https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js';sc.onload=go;sc.onerror=function(){done(null)};document.head.appendChild(sc)}
+  };
+  if('BarcodeDetector' in window){
+    createImageBitmap(f).then(function(b){return new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128']}).detect(b)}).then(function(r){if(r.length)done(r[0].rawValue);else viaLib()}).catch(viaLib);
+  }else viaLib();
+};
+$('bc').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();onCode($('bc').value)}});
+var arch=lsGet('mhd_done_v1',[]),acol=null,LSD='mhd_done_v1',clrT=null;
+function dfmt(ts){var d=new Date(ts);return d.toLocaleDateString('de-DE')+' '+d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}
+function renderDone(){
+  var s=arch.slice().sort(function(a,b){return b.at-a.at}).slice(0,100);
+  $('dl').innerHTML=s.map(function(it){return '<div class="it"><span class="dot" style="background:var(--mu)"></span>'+(it.img?'<img class="th" src="'+it.img+'" alt="">':'')+'<div class="in"><div class="nm">'+esc(it.name)+'</div><div class="sub">MHD '+fmt(it.mhd)+' · erledigt '+dfmt(it.at)+'</div></div><button class="g" data-r="'+it.id+'">Zurück</button></div>'}).join('');
+  $('de').style.display=s.length?'none':'block';
+}
+function restoreItem(id){
+  var a=arch.filter(function(x){return x.id===id})[0];if(!a)return;
+  arch=arch.filter(function(x){return x.id!==id});lsSet(LSD,arch);renderDone();
+  if(acol)acol.doc(id).delete().catch(function(){});
+  if(col){col.doc(id).set({name:a.name,mhd:a.mhd,qty:null,img:a.img||null}).catch(function(){})}
+  else{items.push({id:id,name:a.name,mhd:a.mhd,qty:null,img:a.img||null});persistLocal();render()}
+}
+$('dl').addEventListener('click',function(e){var b=e.target.closest('button[data-r]');if(b)restoreItem(b.dataset.r)});
+$('clr').onclick=function(){
+  var b=this;
+  if(!clrT){b.textContent='Wirklich leeren?';clrT=setTimeout(function(){b.textContent='Leeren';clrT=null},4000);return}
+  clearTimeout(clrT);clrT=null;b.textContent='Leeren';
+  var old=arch;arch=[];lsSet(LSD,arch);renderDone();
+  if(acol)old.forEach(function(x){acol.doc(x.id).delete().catch(function(){})});
+};
+document.addEventListener('click',function(e){
+  var im=e.target.closest&&e.target.closest('img.th');
+  if(im){$('lbi').src=im.src;$('lb').style.display='flex'}
+  else if(e.target.closest&&e.target.closest('#lb')){$('lb').style.display='none'}
+});
+$('add').onclick=addItem;
+$('n').addEventListener('keydown',function(e){if(e.key==='Enter')$('d').focus()});
+$('list').addEventListener('click',function(e){var b=e.target.closest('button[data-id]');if(b)removeItem(b.dataset.id)});
+$('wd').value=lsGet(LSW,3);
+$('wd').onchange=function(){lsSet(LSW,wd());render()};
+$('notif').onclick=function(){
+  if(!('Notification' in window)){$('hint').textContent='Dieser Browser unterstützt keine Benachrichtigungen – die Warnung oben auf der Seite zeigt dir trotzdem alles Wichtige.';return}
+  Notification.requestPermission().then(function(p){
+    $('hint').textContent=p==='granted'?'Benachrichtigungen aktiv: Beim Öffnen der App kommt eine Meldung, wenn Artikel bald ablaufen.':'Benachrichtigungen nicht erlaubt – die Warnung oben auf der Seite bleibt aktiv.';
+    if(p==='granted'){notified=false;notify(render())}
+  }).catch(function(){});
+};
+
+// Start: lokal laden, dann gemeinsame Datenbank zuschalten (falls verfügbar)
+items=lsGet(LS,[]);renderDone();
+notify(render());
+try{
+  if(window.claude&&claude.use){
+    claude.use('db').then(function(db){
+      if(!db)return;
+      ccol=db.collection('catalog');
+      ccol.onSnapshot(function(s){(s.docs||[]).forEach(function(d){var v=d.data();if(v&&v.name)cat[d.id]=v.name});lsSet('mhd_cat_v1',cat)},function(){ccol=null});
+      acol=db.collection('archive');
+      acol.onSnapshot(function(s){var a=[];(s.docs||[]).forEach(function(d){var v=d.data();a.push({id:d.id,name:v.name,mhd:v.mhd,img:v.img,at:v.at})});arch=a;lsSet(LSD,arch);renderDone()},function(){acol=null});
+      var c=db.collection('items');
+      var done=false;
+      var t=setTimeout(function(){if(!done)col=null},10000);
+      c.onSnapshot(function(snap){
+        done=true;clearTimeout(t);col=c;
+        var arr=[];
+        (snap.docs||[]).forEach(function(d){var v=d.data();arr.push({id:d.id,name:v.name,mhd:v.mhd,qty:v.qty,img:v.img})});
+        items=arr;
+        notify(render());
+      },function(){col=null});
+    }).catch(function(){});
+  }
+}catch(e){}
+setInterval(function(){render()},3600000);
+})();
+</script>
+</body>
+</html>
